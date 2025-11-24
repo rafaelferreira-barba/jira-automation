@@ -15,6 +15,8 @@ import java.util.*;
 import java.util.List;
 
 public class SwingUI {
+    private static final String PROPERTIES_PATH = "jira.properties";
+
     private static JFrame frame;
     private static JTable table;
     private static DefaultTableModel model;
@@ -22,13 +24,11 @@ public class SwingUI {
     private static JComboBox<String> commandBox;
     private static JComboBox<String> delimiterBox;
 
-    // Painel de mapeamento e estruturas auxiliares
     private static JPanel mappingPanel;
     private static List<String> currentHeaders = new ArrayList<>();
     private static List<JComboBox<String>> mappingCombos = new ArrayList<>();
-    private static boolean refreshing = false; // guard contra recursão
+    private static boolean refreshing = false;
 
-    // Opções de campos do Jira para mapeamento (sp -> estimate)
     private static final String[] JIRA_FIELDS = new String[]{"summary", "description", "component", "parent", "label", "estimate", "skip"};
 
     public static void launch() {
@@ -36,14 +36,21 @@ public class SwingUI {
 
             frame = new JFrame("Jira Automation");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setSize(1000, 600);
+            frame.setSize(1400, 600);
             frame.setLayout(new BorderLayout());
+
+            JPanel topBar = new JPanel(new BorderLayout());
+            JPanel topRight = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton btnSettings = new JButton("⚙");
+            btnSettings.setToolTipText("Configurações do Jira");
+            topRight.add(btnSettings);
+            topBar.add(topRight, BorderLayout.NORTH);
+            frame.add(topBar, BorderLayout.NORTH);
 
             model = new DefaultTableModel();
             table = new JTable(model);
             frame.add(new JScrollPane(table), BorderLayout.CENTER);
 
-            // Painel inferior com BorderLayout:
             JPanel bottom = new JPanel(new BorderLayout());
 
             JPanel leftBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -70,16 +77,14 @@ public class SwingUI {
 
             frame.add(bottom, BorderLayout.SOUTH);
 
-            // Painel de mapeamento à direita
             mappingPanel = new JPanel(new BorderLayout());
-            mappingPanel.add(new JLabel("Mapeamento De → Para", SwingConstants.CENTER), BorderLayout.NORTH);
+            mappingPanel.add(new JLabel("Mapeamento", SwingConstants.CENTER), BorderLayout.NORTH);
             frame.add(mappingPanel, BorderLayout.EAST);
 
-            // Listeners
             btnChooseCsv.addActionListener(evt -> chooseCsvFile(frame));
             btnRun.addActionListener(evt -> runAutomation());
+            btnSettings.addActionListener(evt -> showPropertiesDialog());
 
-            // Recarrega CSV ao trocar delimitador, se já houver arquivo selecionado
             delimiterBox.addActionListener(e -> {
                 if (selectedCsvPath != null && !selectedCsvPath.isEmpty()) {
                     loadCsvToTable(selectedCsvPath);
@@ -140,7 +145,6 @@ public class SwingUI {
                 model.addRow(r);
             }
 
-            // Construir/atualizar UI de mapeamento
             buildMappingUI(header);
 
         } catch (Exception e) {
@@ -149,7 +153,6 @@ public class SwingUI {
     }
 
     private static void buildMappingUI(String[] header) {
-        // Limpa painel de mapeamento
         mappingPanel.removeAll();
         mappingCombos.clear();
 
@@ -160,33 +163,27 @@ public class SwingUI {
         gbc.anchor = GridBagConstraints.WEST;
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // Título
         JLabel title = new JLabel("Mapeamento De → Para", SwingConstants.CENTER);
         title.setFont(title.getFont().deriveFont(Font.BOLD));
         mappingPanel.add(title, BorderLayout.NORTH);
 
-        // Conteúdo
         JScrollPane scroll = new JScrollPane(inner);
         scroll.setPreferredSize(new Dimension(300, 0));
         mappingPanel.add(scroll, BorderLayout.CENTER);
 
-        // Set para evitar pré-selecionar a mesma opção em múltiplos combos
         Set<String> used = new HashSet<>();
 
         for (int i = 0; i < header.length; i++) {
             String headerName = header[i] == null ? "" : header[i].trim();
 
-            // Label do cabeçalho
             gbc.gridx = 0;
             gbc.gridy = i;
             JLabel lbl = new JLabel(headerName);
             inner.add(lbl, gbc);
 
-            // Dropdown de mapeamento
             gbc.gridx = 1;
             JComboBox<String> combo = new JComboBox<>(JIRA_FIELDS);
 
-            // Pré-seleção por equalsIgnoreCase; senão "skip"
             String match = findMatchingOption(headerName);
             String matchLower = match == null ? null : match.toLowerCase(Locale.ROOT);
             if (match != null && !used.contains(matchLower) && !"skip".equals(matchLower)) {
@@ -323,7 +320,7 @@ public class SwingUI {
         }
 
         try {
-            Properties props = loadProperties("jira.properties");
+            Properties props = loadProperties(PROPERTIES_PATH);
 
             String email = props.getProperty("jira.email");
             String token = props.getProperty("jira.token");
@@ -339,7 +336,7 @@ public class SwingUI {
 
             List<String[]> rows = reader.readAll();
             if (!rows.isEmpty()) {
-                rows.remove(0); // remove cabeçalho
+                rows.remove(0);
             }
 
             int count = 0;
@@ -379,7 +376,7 @@ public class SwingUI {
     private static int parseIntOrZero(String s) {
         try {
             if (s == null) return 0;
-            s = s.trim().replace(",", "."); // caso venha "3,0" como texto
+            s = s.trim().replace(",", ".");
             if (s.isEmpty()) return 0;
             try {
                 return Integer.parseInt(s);
@@ -398,5 +395,96 @@ public class SwingUI {
             props.load(reader);
         }
         return props;
+    }
+
+    private static void showPropertiesDialog() {
+        Properties props;
+        try {
+            props = loadProperties(PROPERTIES_PATH);
+        } catch (Exception e) {
+            props = new Properties();
+        }
+
+        String domain = props.getProperty("jira.domain", "");
+        String project = props.getProperty("jira.project", "");
+        String email = props.getProperty("jira.email", "");
+        String token = props.getProperty("jira.token", "");
+
+        JDialog dialog = new JDialog(frame, "Configurações do Jira", true);
+        dialog.setSize(650, 300);
+        dialog.setLocationRelativeTo(frame);
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(8, 10, 8, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+
+        JTextField domainField = new JTextField(domain, 25);
+        JTextField projectField = new JTextField(project, 25);
+        JTextField emailField = new JTextField(email, 25);
+        JPasswordField tokenField = new JPasswordField(token, 25);
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Domain (ex: seu-dominio.atlassian.net):"), gbc);
+        gbc.gridx = 1;
+        panel.add(domainField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        panel.add(new JLabel("Project Key (ex: ABC):"), gbc);
+        gbc.gridx = 1;
+        panel.add(projectField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2;
+        panel.add(new JLabel("Email:"), gbc);
+        gbc.gridx = 1;
+        panel.add(emailField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 3;
+        panel.add(new JLabel("Token:"), gbc);
+        gbc.gridx = 1;
+        panel.add(tokenField, gbc);
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnSave = new JButton("Salvar");
+        JButton btnCancel = new JButton("Cancelar");
+        buttons.add(btnCancel);
+        buttons.add(btnSave);
+
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
+        panel.add(buttons, gbc);
+
+        dialog.setContentPane(panel);
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+
+        btnSave.addActionListener(e -> {
+            try {
+                String newDomain = domainField.getText().trim();
+                String newProject = projectField.getText().trim();
+                String newEmail = emailField.getText().trim();
+                String newToken = new String(tokenField.getPassword()).trim();
+                Properties propsToSave = new Properties();
+                propsToSave.setProperty("jira.domain", newDomain);
+                propsToSave.setProperty("jira.project", newProject);
+                propsToSave.setProperty("jira.email", newEmail);
+                propsToSave.setProperty("jira.token", newToken);
+
+                saveProperties(propsToSave, PROPERTIES_PATH);
+
+                JOptionPane.showMessageDialog(dialog, "Configurações salvas com sucesso.");
+                dialog.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "Erro ao salvar configurações: " + ex.getMessage());
+            }
+        });
+
+        dialog.setVisible(true);
+    }
+
+    private static void saveProperties(Properties props, String path) throws Exception {
+        try (var writer = Files.newBufferedWriter(Path.of(path))) {
+            props.store(writer, "Jira settings - updated by Jira Automation UI");
+        }
     }
 }

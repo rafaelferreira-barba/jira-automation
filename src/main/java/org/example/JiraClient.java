@@ -90,7 +90,7 @@ public class JiraClient {
             );
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://" + domain + "/rest/api/2/issue"))
+                    .uri(URI.create(domain + "/rest/api/2/issue"))
                     .header("Authorization", "Basic " + base64(email + ":" + token))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json))
