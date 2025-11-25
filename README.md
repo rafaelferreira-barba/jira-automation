@@ -26,7 +26,7 @@ jira.email=seu-email@exemplo.com
 # Token de API gerado no passo anterior
 jira.token=seu-token-aqui
 
-# Domínio do Jira (sem https://)
+# Domínio do Jira
 jira.domain=seu-domínio.atlassian.net
 
 # Key do projeto no Jira
